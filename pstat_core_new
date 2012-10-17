@@ -1,0 +1,221 @@
+#! /usr/bin/perl -w
+
+# LAST MAJOR CHANGES: OCT 2012
+
+# This script used by the pstat script
+# Origninally written by Joseph Sack, class of '03
+# Heavily modified to work with the new printer log format in Oct 2012 by Tate Larsen, class of '13
+
+
+# Usage:
+#   'pstat_fix <RCS_USERNAME> <PRINTER_NAME>'
+
+# HOW IT WORKS:
+#  1) Grab any blocks in the logs for <PRINTER_NAME> relating to the specified <RCS_USERNAME>
+#  2) Go line by line through those blocks parsing interesting data and outputting it
+#  3) Check the current queue for <PRINTER_NAME> for jobs from <RCS_USERNAME>
+
+
+# $ARGV[0] = RCS Username
+# $ARGV[1] = Printer name
+
+# NOTE: MOST ERROR CHECKING OCCURS IN PSTAT
+#  THIS ONLY CHECKS IF TWO ARGUMENTS WERE PASSED, 
+#  NOT IF VALID <RCS_USERNAME> AND <PRINTER_NAME> WERE PASSED
+#  (IT SHOULD NOT GET THIS FAR IF <PRINTER_NAME> INVALID AND INVALID <RCS_USERNAME> SHOULD NOT BREAK IT)
+
+
+# Note: Jobs with errors have a comma instead of a colon after the starting timestamp in the "Finished" line
+#  i.e:     "papif: Finished job  <RCS_USERNAME>:<JOB_ID> at <MONTH>  <DAY> 01:00:00 (<MONTH>  <DAY> 00:00:00):   <SIZE> bytes,     <PAGE_COUNT> pages/sheets"
+#  becomes: "papif: Finished job  <RCS_USERNAME>:<JOB_ID> at <MONTH>  <DAY> 01:00:00 (<MONTH>  <DAY> 00:00:00),   <SIZE> bytes,     <PAGE_COUNT> pages/sheets"
+#  DIFFERENCE:                                                                                                ^
+# Make all prints flush the buffer (Perl witchcraft)
+$|=1;
+
+# Check that arguments were passed
+if(!$ARGV[0] || !$ARGV[1]) {
+    print "Usage: pstat_fix <RCS_USERNAME> <PRINTER_NAME>\n";
+    exit;
+}
+
+# Keep track of log style
+#  0 - New log format introduced in 2012
+#  1 - Old log format
+$old_style=0;
+
+# String of all log locations for the given printer to handle special cases
+$logs_loc = "";
+
+# Location of all log directories
+$r_dir="/var/adm/lpd";
+# Maximum age of a log file to look at (In days)
+$log_max_age = 30;
+
+# Grab log locations (vcplt and vcpltg are special
+if($ARGV[1] eq "vcplt") {
+    # Open the log directories directory
+    opendir (DIR, $r_dir) || die "Failed to open directory $r_dir\n";
+    # Grep the list of subdirectories for "vcplt<number>" and close the directory
+    @t_log_locs = grep {-d "$r_dir/$_" && /^vcplt\d*$/} readdir(DIR);
+    closedir(DIR);
+    # Check the age of any log files in each of those directories
+    foreach $tll (@t_log_locs) {
+        opendir(DIR,"$r_dir/$tll") || die "Failed to open directory $r_dir/$tll\n";
+        @log_files = grep {-f "$r_dir/$tll/$_" && /^log/} readdir(DIR);
+        foreach $lf (@log_files) {
+            # If the log is less than $log_max_age days old, add it to the list of logs to parse
+            if(-M "$r_dir/$tll/$lf" < $log_max_age) {
+                $logs_loc .= "$r_dir/$tll/$lf ";
+            }
+        }
+        closedir(DIR);
+    }
+} elsif($ARGV[1] eq "vcpltg") {
+    # Open the log directories directory
+    opendir (DIR, $r_dir) || die "Failed to open directory $r_dir\n";
+    # Grep the list of subdirectories for "vcplt<number>" and close the directory
+    @t_log_locs = grep {-d "$r_dir/$_" && /^vcpltg\d*$/} readdir(DIR);
+    closedir(DIR);
+    # Check the age of any log files in each of those directories
+    foreach $tll (@t_log_locs) {
+        opendir(DIR,"$r_dir/$tll") || die "Failed to open directory $r_dir/$tll\n";
+        @log_files = grep {-f "$r_dir/$tll/$_" && /^log/} readdir(DIR);
+        foreach $lf (@log_files) {
+            # If the log is less than $log_max_age days old, add it to the list of logs to parse
+            if(-M "$r_dir/$tll/$lf" < $log_max_age) {
+                $logs_loc .= "$r_dir/$tll/$lf ";
+            }
+        }
+        closedir(DIR);
+    }
+} else {
+    $logs_loc .= "$r_dir/$ARGV[1]/log*";
+}
+
+# Grab everything between lines containing
+#   "Starting <Username>" and "Finished <Username>" (inclusive)
+@logs = `sed -n "/Starting[ ]*$ARGV[0]/,/Finished[ ]*$ARGV[0]/p" $logs_loc`;
+# If nothing grabbed in last command, try the old log format
+#   "Starting job for <Username>" to "Finished job <Username>" (inclusive)
+if(@logs==0) {
+    @logs = `sed -n "/Starting[ ]*job[ ]*for[ ]*$ARGV[0]/,/Finished[ ]*job[ ]*$ARGV[0]/p" $logs_loc`;
+    $old_style=1;
+}
+
+
+print "----------\nLogs:\n----------\n";
+
+# If no jobs found in the log, notify
+if(@logs==0) {
+    print "No logs found for user $ARGV[0] on $ARGV[1]\n";
+# Else print log entry info
+} else {
+    # Flag to skip ahead (Something broke in horrible ways)
+    $skip_ahead=0;
+
+    # Flag to keep track of if we ought to be between a start and finish
+    $inside_job=0;
+
+    # Go through each line grabbed from the log
+    foreach $log (@logs) {
+        # Matches "Starting" lines
+        if($log=~/Starting/) {
+            # Start line is not for this user, something broke, skip ahead
+            if(!($log=~/$ARGV[0]/)) {
+                $skip_ahead=1;
+                next;
+            }
+            # If skip_ahead flag is set, unset
+            if($skip_ahead==1) {
+                $skip_ahead=0;
+            }
+            # If inside_job flag is set, print that it is active and unset
+            if($inside_job==1) {
+                print "Finished:\t\tActive Job\n\n";
+                $inside_job=0;
+            }
+            # If we can grab the time, print it
+            #   matches "at <stuff>dd:dd:dd"
+            if($log=~/at[\s]*([^\.^:]*\d\d:\d\d:\d\d)/) {
+                print "Started:\t\t$1\n";
+                # Set inside_job flag
+                $inside_job=1;
+            }
+        # Go ahead and skip ahead to the next section if something broke
+        } elsif($skip_ahead==1) {
+            next;
+        # Matches "error" lines
+        } elsif($log=~/[eE]rror/) {
+            # Print whatever error it gave
+            if($log=~/handleread:[\s]*(.*)/) {
+                print "Error Occured:\t\t$1\n";
+            } elsif($old_style==1 && $log=~/Error: (.*?);/) {
+                print "Error Occured:\t\t$1\n";
+            } else {
+                print "Error Occured:\t\tUnknown\n";
+            }
+        # Matches "Reprint-Requested" lines
+        } elsif($log=~/Requested-Reprint/) {
+            # If we can grab the time, print it
+            #   matches "at <stuff>dd:dd:dd"
+            if($log=~/at[\s]*([^\.^:]*\d\d:\d\d:\d\d)/) {
+                print "Requested Reprint:\t$1\n";
+            }
+        # Matches "Finished" lines
+        } elsif($log=~/Finished/) {
+            # Check for unknown errors in old log format
+            if($old_style==1 && $log=~/at[\s]*([^\.^:]*\d\d:\d\d:\d\d).*\([^\.^:]*\d\d:\d\d:\d\d\),.*/) {
+                print "Error Occured:\t\tUnknown\n";
+            }
+            # If we can grab the time and pages, print them
+            #   matches "at <stuff>dd:dd:dd<stuff-non-greedy>d pages"
+            if($log=~/at[\s]*([^\.^:]*\d\d:\d\d:\d\d).*?([-]*\d+) pages/) {
+                print "Finished:\t\t$1 ($2 pages)\n\n";
+            }
+            # Unset inside_job flag
+            $inside_job=0;
+        } elsif($log=~/Aborted/) {
+            if($log=~/at[\s]*([^\.^:]*\d\d:\d\d:\d\d).*?pages/) {
+                print "Aborted:\t\t$1\n\n";
+            }
+            # Unset inside_job flag
+            $inside_job=0;
+        }
+    }
+}
+
+# Check the print Queue
+@ques = `lpq -P$ARGV[1]`;
+
+$queue_out = "";
+$queue_header = "";
+
+# Grab the header info from lpq output
+if($ques[0]=~/status:(.*)\; source/i) {
+    $queue_header .= "Status: $1\n";
+    $ques[0] = "";
+} else {
+    if($ques[0]=~/status:(.*)/i) {
+        $queue_header .= "Status: $1\n";
+        $ques[0] = "";
+    }
+}
+
+# Collect any entries for the given user
+foreach $que (@ques) {
+	if($que=~/$ARGV[0]/i) {
+		$queue_out .= $que . "\n";
+	}
+}
+
+# Print the user queue entries, if any
+print "\n----------\nQueue:\n----------\n";
+
+if(length($queue_out)!=0) {
+    print $queue_header;
+    print $queue_out;
+} else {
+    print "No jobs for user $ARGV[0] in queue for $ARGV[1].\n";
+}
+
+print "\n";

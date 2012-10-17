@@ -1,0 +1,28 @@
+#! /usr/bin/perl -w
+
+#
+# This script written by Joseph Sack, class of '03
+# Modified in OCT 2012 by Tate Larsen, class of '13 
+# Use: pstat <user> <printer>
+# Outputs queue/log information for a specific user/printer
+#
+
+if($ARGV[0] && $ARGV[1]) {
+    # Find which server this printer's logs are on
+	@lines = `lpc stat $ARGV[1]`;
+    # count exists to check if the printer name is valid
+    $count = 0;
+	foreach $line (@lines) {
+		if($line=~/\(sends to ([^\)]*)/) {
+			system "ssh $1 ~/pstat_work/pstat_log_copy_core $ARGV[0] $ARGV[1]";
+            $count++;
+		}
+	}
+    # Let user know that the specified printer could not be found
+    if($count==0) {
+        print "Unable to find printer $ARGV[1], please check printer name.\n";
+    }   
+} else {
+	print "Use: pstat_log_copy <userid> <printer>\n";
+}
+

@@ -1,0 +1,123 @@
+#! /usr/bin/perl -w
+
+# LAST MAJOR CHANGES: OCT 2012
+
+# This script used by the pstat_log_copy script
+# Written in Oct 2012 by Tate Larsen, class of '13
+
+
+# Usage:
+#   'pstat_log_copy_core <RCS_USERNAME> <PRINTER_NAME>'
+
+# $ARGV[0] = RCS Username
+# $ARGV[1] = Printer name
+
+# NOTE: MOST ERROR CHECKING OCCURS IN PSTAT_LOG_COPY
+#  THIS ONLY CHECKS IF TWO ARGUMENTS WERE PASSED, 
+#  NOT IF VALID <RCS_USERNAME> AND <PRINTER_NAME> WERE PASSED
+#  (IT SHOULD NOT GET THIS FAR IF <PRINTER_NAME> INVALID AND INVALID <RCS_USERNAME> DOESN'T MATTER)
+
+# Make all prints flush the buffer (Perl witchcraft)
+$|=1;
+
+# Check that arguments were passed
+if(!$ARGV[0] || !$ARGV[1]) {
+    print "Usage: pstat_fix <RCS_USERNAME> <PRINTER_NAME>\n";
+    exit;
+}
+
+print "Determining Log Locations..."; # Status Output
+
+# String of all log locations for the given printer to handle special cases
+$logs_loc = "";
+
+# Location of all log directories
+$r_dir="/var/adm/lpd";
+# Maximum age of a log file to look at (In days)
+$log_max_age = 30;
+
+# Grab log locations (vcplt and vcpltg are special
+if($ARGV[1] eq "vcplt") {
+    # Open the log directories directory
+    opendir (DIR, $r_dir) || die "Failed to open directory $r_dir\n";
+    # Grep the list of subdirectories for "vcplt<number>" and close the directory
+    @t_log_locs = grep {-d "$r_dir/$_" && /^vcplt\d*$/} readdir(DIR);
+    closedir(DIR);
+    # Check the age of any log files in each of those directories
+    foreach $tll (@t_log_locs) {
+        opendir(DIR,"$r_dir/$tll") || die "Failed to open directory $r_dir/$tll\n";
+        @log_files = grep {-f "$r_dir/$tll/$_" && /^log/} readdir(DIR);
+        foreach $lf (@log_files) {
+            # If the log is less than $log_max_age days old, add it to the list of logs to parse
+            if(-M "$r_dir/$tll/$lf" < $log_max_age) {
+                $logs_loc .= "$r_dir/$tll/$lf ";
+            }
+        }
+        closedir(DIR);
+    }
+} elsif($ARGV[1] eq "vcpltg") {
+    # Open the log directories directory
+    opendir (DIR, $r_dir) || die "Failed to open directory $r_dir\n";
+    # Grep the list of subdirectories for "vcplt<number>" and close the directory
+    @t_log_locs = grep {-d "$r_dir/$_" && /^vcpltg\d*$/} readdir(DIR);
+    closedir(DIR);
+    # Check the age of any log files in each of those directories
+    foreach $tll (@t_log_locs) {
+        opendir(DIR,"$r_dir/$tll") || die "Failed to open directory $r_dir/$tll\n";
+        @log_files = grep {-f "$r_dir/$tll/$_" && /^log/} readdir(DIR);
+        foreach $lf (@log_files) {
+            # If the log is less than $log_max_age days old, add it to the list of logs to parse
+            if(-M "$r_dir/$tll/$lf" < $log_max_age) {
+                $logs_loc .= "$r_dir/$tll/$lf ";
+            }
+        }
+        closedir(DIR);
+    }
+} else {
+    $logs_loc .= "$r_dir/$ARGV[1]/log*";
+}
+
+#Get the current date
+use Time::localtime;
+$year = localtime->year()+1900;
+$mon = localtime->mon();
+$mday = localtime->mday();
+
+# localtime returns a number 0 to 11 for month, array for converting to 1 to 12 and padding with a zero where necessary
+@rmonth=("01","02","03","04","05","06","07","08","09","10","11","12");
+
+# Specify destination directory based on user, printer, and date
+$dest_directory = "pstat_log_files/logs-$ARGV[0]-$ARGV[1]-$year$rmonth[$mon]$mday";
+
+print " Done\nCopying Logs..."; # Status Output
+
+# Go through the found logs
+foreach $log (split(/\s/,$logs_loc)) {
+    # Grab the log sub-directory
+    if($log=~/\/([^\/]*)\/log/) {
+        # If the destingation sub-directory doesn't exist, create it
+        if(!(-e "$dest_directory/$1")) {
+            system("mkdir -p $dest_directory/$1");
+        }
+        # Copy the log file
+        system("cp $log $dest_directory/$1");
+    }
+}
+
+print " Done\nCreating Tarball..."; # Status Output
+
+# Tarball the collected logs
+system("tar cvf $dest_directory.tar $dest_directory>/dev/null 2>&1");
+system("gzip -f $dest_directory.tar");
+
+print " Done\nCleaning Up..."; # Status Output
+
+# Remove the copied log files leaving only the tarball
+system("rm -r $dest_directory");
+
+print " Done\n"; # Status Output
+
+
+
+
+
