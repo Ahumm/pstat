@@ -8,7 +8,7 @@
 
 
 # Usage:
-#   'pstat_fix <RCS_USERNAME> <PRINTER_NAME>'
+#   'pstat_core_new <RCS_USERNAME> <PRINTER_NAME>'
 
 # HOW IT WORKS:
 #  1) Grab any blocks in the logs for <PRINTER_NAME> relating to the specified <RCS_USERNAME>
@@ -34,7 +34,7 @@ $|=1;
 
 # Check that arguments were passed
 if(!$ARGV[0] || !$ARGV[1]) {
-    print "Usage: pstat_fix <RCS_USERNAME> <PRINTER_NAME>\n";
+    print "Usage: pstat_core_new <RCS_USERNAME> <PRINTER_NAME>\n";
     exit;
 }
 

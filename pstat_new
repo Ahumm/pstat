@@ -14,7 +14,7 @@ if($ARGV[0] && $ARGV[1]) {
     $count = 0;
 	foreach $line (@lines) {
 		if($line=~/\(sends to ([^\)]*)/) {
-			system "ssh $1 ~/pstat_work/pstat_core_new $ARGV[0] $ARGV[1]";
+			system "ssh $1 ~/pstat_new/pstat_core_new $ARGV[0] $ARGV[1]"; # Run the pstat_core script on the server with the logs
             $count++;
 		}
 	}
@@ -23,6 +23,6 @@ if($ARGV[0] && $ARGV[1]) {
         print "Unable to find printer $ARGV[1], please check printer name.\n";
     }   
 } else {
-	print "Use: pstat <userid> <printer>\n";
+	print "Use: pstat_new <userid> <printer>\n";
 }
 

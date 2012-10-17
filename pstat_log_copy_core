@@ -22,7 +22,7 @@ $|=1;
 
 # Check that arguments were passed
 if(!$ARGV[0] || !$ARGV[1]) {
-    print "Usage: pstat_fix <RCS_USERNAME> <PRINTER_NAME>\n";
+    print "Usage: pstat_log_copy_core <RCS_USERNAME> <PRINTER_NAME>\n";
     exit;
 }
 
