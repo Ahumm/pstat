@@ -8,7 +8,7 @@
 
 
 # Usage:
-#   'pstat_core_new <RCS_USERNAME> <PRINTER_NAME>'
+#   'pstat_core <RCS_USERNAME> <PRINTER_NAME>'
 
 # HOW IT WORKS:
 #  1) Grab any blocks in the logs for <PRINTER_NAME> relating to the specified <RCS_USERNAME>
@@ -34,7 +34,7 @@ $|=1;
 
 # Check that arguments were passed
 if(!$ARGV[0] || !$ARGV[1]) {
-    print "Usage: pstat_core_new <RCS_USERNAME> <PRINTER_NAME>\n";
+    print "Usage: pstat_core <RCS_USERNAME> <PRINTER_NAME>\n";
     exit;
 }
 
@@ -50,6 +50,13 @@ $logs_loc = "";
 $r_dir="/var/adm/lpd";
 # Maximum age of a log file to look at (In days)
 $log_max_age = 30;
+# Accept specified age (Old logs get purged from time to time so this may have no effect)
+if($ARGV[2]) {
+    if($ARGV[2]=~/\d+$/) {
+        $log_max_age = $ARGV[2];
+    }
+}
+#print "Checking available logs for last $log_max_age days.\n";
 
 # Grab log locations (vcplt and vcpltg are special
 if($ARGV[1] eq "vcplt") {
