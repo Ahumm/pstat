@@ -14,11 +14,7 @@ if($ARGV[0] && $ARGV[1]) {
     $count = 0;
 	foreach $line (@lines) {
 		if($line=~/\(sends to ([^\)]*)/) {
-			if($ARGV[2]) {
-system "ssh $1 pstat_core $ARGV[0] $ARGV[1] $ARGV[2]"; # Run the pstat_core script on the server with the logs
-            } else {
-                system "ssh $1 pstat_core $ARGV[0] $ARGV[1]"; # Run the pstat_core script on the server with the logs
-            }
+            system "ssh $1 pstat_core @ARGV"; # Run the pstat_core script on the server with the logs
             $count++;
 		}
 	}

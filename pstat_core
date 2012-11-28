@@ -38,6 +38,13 @@ if(!$ARGV[0] || !$ARGV[1]) {
     exit;
 }
 
+if(!($ARGV[0]=~/^[a-zA-Z]+[0-9]*$/)) {
+    if(!(grep(/^override$/, @ARGV))) {
+        print "Invalid format RCS Username: \"$ARGV[0]\".\nOverride by entering a third or later argument of \"override\" (pstat <RCS_USERNAME> <PRINTER_NAME> override)\n";
+        exit;
+    }
+}
+
 # Keep track of log style
 #  0 - New log format introduced in 2012
 #  1 - Old log format
@@ -52,8 +59,8 @@ $r_dir="/var/adm/lpd";
 $log_max_age = 30;
 # Accept specified age (Old logs get purged from time to time so this may have no effect)
 if($ARGV[2]) {
-    if($ARGV[2]=~/\d+$/) {
-        $log_max_age = $ARGV[2];
+    if($ARGV[2]=~/^\d+$/) {
+        $log_max_age = $1;
     }
 }
 #print "Checking available logs for last $log_max_age days.\n";
